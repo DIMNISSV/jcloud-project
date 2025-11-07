@@ -1,0 +1,111 @@
+# docker-compose.yml
+version: "3.9"
+
+services:
+  #
+  # Core Infrastructure
+  #
+  db:
+    image: postgres:16-alpine
+    container_name: platform_db
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    container_name: platform_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  #
+  # Nextcloud File Storage
+  #
+  nextcloud_db:
+    image: postgres:16-alpine
+    container_name: nextcloud_db
+    restart: unless-stopped
+    volumes:
+      - nextcloud_db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${NC_DB_NAME}
+      - POSTGRES_USER=${NC_DB_USER}
+      - POSTGRES_PASSWORD=${NC_DB_PASSWORD}
+
+  nextcloud:
+    image: nextcloud:29
+    container_name: nextcloud_app
+    restart: unless-stopped
+    ports:
+      - "8888:80"
+    depends_on:
+      - nextcloud_db
+    volumes:
+      - nextcloud_app_data:/var/www/html
+    environment:
+      - POSTGRES_HOST=nextcloud_db
+      - POSTGRES_DB=${NC_DB_NAME}
+      - POSTGRES_USER=${NC_DB_USER}
+      - POSTGRES_PASSWORD=${NC_DB_PASSWORD}
+
+  user-service:
+    container_name: user_service
+    build:
+      context: ./services/user-service
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - JWT_SECRET=${JWT_SECRET}
+      - DOCKER_ENV=true
+
+  video-service:
+    container_name: video_service
+    build:
+      context: ./services/video-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./uploads:/uploads # Mount a local folder for temporary file storage
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - JWT_SECRET=${JWT_SECRET}
+      - DOCKER_ENV=true
+
+  billing-service:
+    container_name: billing_service
+    build:
+      context: ./services/billing-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    depends_on:
+      - db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - DOCKER_ENV=true
+
+volumes:
+  postgres_data:
+  redis_data:
+  nextcloud_db_data:
+  nextcloud_app_data:

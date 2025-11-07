@@ -1,0 +1,85 @@
+// internal/handler/user_handler.go
+package handler
+
+import (
+	"jcloud-project/user-service/internal/service"
+	"net/http"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
+)
+
+//
+// User Handler
+//
+
+type UserHandler struct {
+	service service.UserService
+}
+
+func NewUserHandler(s service.UserService) *UserHandler {
+	return &UserHandler{service: s}
+}
+
+// DTO for user registration request
+type registerRequest struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+}
+
+func (h *UserHandler) Register(c echo.Context) error {
+	var req registerRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request format"})
+	}
+
+	// Basic validation, can be replaced with a validator library later
+	if req.Email == "" || len(req.Password) < 8 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "email and password are required, password must be at least 8 characters"})
+	}
+
+	user, err := h.service.Register(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		// In a real app, you would check for specific errors, like duplicate email
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not create user"})
+	}
+
+	return c.JSON(http.StatusCreated, user)
+}
+
+// DTO for user login request
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) Login(c echo.Context) error {
+	var req loginRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request format"})
+	}
+
+	token, err := h.service.Login(c.Request().Context(), req.Email, req.Password)
+	if err != nil {
+		// For security, we return a generic "Unauthorized" error
+		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "invalid credentials"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"token": token,
+	})
+}
+
+func (h *UserHandler) Profile(c echo.Context) error {
+	// The middleware places the parsed token in the context
+	userToken := c.Get("user").(*jwt.Token)
+	claims := userToken.Claims.(*service.JwtCustomClaims)
+	userID := claims.UserID
+
+	user, err := h.service.GetProfile(c.Request().Context(), userID)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "user not found"})
+	}
+
+	return c.JSON(http.StatusOK, user)
+}
