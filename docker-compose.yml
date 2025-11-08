@@ -104,6 +104,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - JWT_SECRET=${JWT_SECRET}
       - DOCKER_ENV=true
+      - NC_API_URL=${NC_API_URL}
+      - NC_API_USER=${NC_API_USER}
+      - NC_API_PASSWORD=${NC_API_PASSWORD}
 
 volumes:
   postgres_data:
