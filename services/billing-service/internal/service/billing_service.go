@@ -14,6 +14,7 @@ type BillingService interface {
 	GetUserPermissions(ctx context.Context, userID int64) (map[string]interface{}, error)
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
 	GetAllPlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
+	GetUserSubscription(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error)
 }
 
 type billingService struct {
@@ -43,4 +44,16 @@ func (s *billingService) CreateInitialSubscription(ctx context.Context, userID i
 
 func (s *billingService) GetAllPlans(ctx context.Context) ([]domain.SubscriptionPlan, error) {
 	return s.repo.FindAllActivePlans(ctx)
+}
+
+func (s *billingService) GetUserSubscription(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error) {
+	details, err := s.repo.FindSubscriptionDetailsByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Return a specific, recognizable error if the user has no subscription
+			return nil, errors.New("subscription not found")
+		}
+		return nil, err
+	}
+	return details, nil
 }

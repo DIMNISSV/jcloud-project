@@ -15,6 +15,7 @@ type BillingRepository interface {
 	FindPermissionsByUserID(ctx context.Context, userID int64) (*domain.SubscriptionPlan, error)
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
 	FindAllActivePlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
+	FindSubscriptionDetailsByUserID(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error)
 }
 
 type billingPostgresRepository struct {
@@ -98,4 +99,19 @@ func (r *billingPostgresRepository) FindAllActivePlans(ctx context.Context) ([]d
 	}
 
 	return plans, nil
+}
+
+func (r *billingPostgresRepository) FindSubscriptionDetailsByUserID(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error) {
+	query := `
+        SELECT p.name, us.status, us.ends_at
+        FROM user_subscriptions us
+        JOIN subscription_plans p ON us.plan_id = p.id
+        WHERE us.user_id = $1
+    `
+	details := &domain.UserSubscriptionDetails{}
+	err := r.db.QueryRow(ctx, query, userID).Scan(&details.PlanName, &details.Status, &details.EndsAt)
+	if err != nil {
+		return nil, err
+	}
+	return details, nil
 }

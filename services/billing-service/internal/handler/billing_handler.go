@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
 
@@ -62,4 +63,22 @@ func (h *BillingHandler) GetAllPlans(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, plans)
+}
+
+func (h *BillingHandler) GetUserSubscription(c echo.Context) error {
+	// Extract user ID from JWT token
+	userToken := c.Get("user").(*jwt.Token)
+	claims := userToken.Claims.(*service.JwtCustomClaims)
+	userID := claims.UserID
+
+	subscription, err := h.service.GetUserSubscription(c.Request().Context(), userID)
+	if err != nil {
+		// Handle the specific "not found" case
+		if err.Error() == "subscription not found" {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": "active subscription not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not retrieve subscription"})
+	}
+
+	return c.JSON(http.StatusOK, subscription)
 }

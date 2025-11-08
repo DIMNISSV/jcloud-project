@@ -10,8 +10,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -27,6 +29,8 @@ func main() {
 		dbHost = "db"
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+
 	// Database Connection
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:5432/%s", dbUser, dbPass, dbHost, dbName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
@@ -38,8 +42,8 @@ func main() {
 
 	// Dependency Injection
 	repo := repository.NewBillingPostgresRepository(dbpool)
-	service := service.NewBillingService(repo)
-	handler := handler.NewBillingHandler(service)
+	billingService := service.NewBillingService(repo)
+	handler := handler.NewBillingHandler(billingService)
 
 	// HTTP Server
 	e := echo.New()
@@ -50,11 +54,23 @@ func main() {
 	// Routes
 	//
 
-	// Public routes, available for frontend clients
+	// JWT Middleware Config
+	jwtConfig := echojwt.Config{
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
+		SigningKey:    []byte(jwtSecret),
+		ContextKey:    "user",
+	}
+
+	// Public routes
 	api := e.Group("/api/v1")
 	api.GET("/plans", handler.GetAllPlans)
 
-	// Internal routes, for service-to-service communication
+	// Protected routes
+	subscriptionsAPI := api.Group("/subscriptions")
+	subscriptionsAPI.Use(echojwt.WithConfig(jwtConfig))
+	subscriptionsAPI.GET("/me", handler.GetUserSubscription)
+
+	// Internal routes
 	internalAPI := e.Group("/internal/v1")
 	internalAPI.GET("/permissions/:userId", handler.GetUserPermissions)
 	internalAPI.POST("/subscriptions", handler.CreateSubscription)

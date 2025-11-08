@@ -25,3 +25,10 @@ type UserSubscription struct {
 	StartsAt time.Time `json:"starts_at"`
 	EndsAt   time.Time `json:"ends_at"`
 }
+
+// UserSubscriptionDetails is a DTO for returning a user's subscription info.
+type UserSubscriptionDetails struct {
+	PlanName string    `json:"plan_name"`
+	Status   string    `json:"status"`
+	EndsAt   time.Time `json:"ends_at"`
+}
