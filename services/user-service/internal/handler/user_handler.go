@@ -4,6 +4,7 @@ package handler
 import (
 	"jcloud-project/user-service/internal/service"
 	"net/http"
+	"strconv"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -82,4 +83,25 @@ func (h *UserHandler) Profile(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, user)
+}
+
+// GetInternalUserDetails provides user details for service-to-service communication.
+// It does not require JWT authentication as it's only exposed on the internal network.
+func (h *UserHandler) GetInternalUserDetails(c echo.Context) error {
+	userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid user id"})
+	}
+
+	user, err := h.service.GetProfile(c.Request().Context(), userID)
+	if err != nil {
+		// This could be a NotFound error, which is important to propagate
+		return c.JSON(http.StatusNotFound, echo.Map{"error": "user not found"})
+	}
+
+	// Return only the necessary fields for internal clients
+	return c.JSON(http.StatusOK, echo.Map{
+		"id":    user.ID,
+		"email": user.Email,
+	})
 }

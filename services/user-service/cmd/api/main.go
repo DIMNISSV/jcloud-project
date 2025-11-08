@@ -84,6 +84,10 @@ func main() {
 
 	protected.GET("/me", userHandler.Profile)
 
+	// Internal routes for service-to-service communication
+	internalAPI := e.Group("/internal/v1")
+	internalAPI.GET("/users/:userId", userHandler.GetInternalUserDetails)
+
 	// Start server
 	log.Println("Starting user-service on :8080")
 	e.Logger.Fatal(e.Start(":8080"))
