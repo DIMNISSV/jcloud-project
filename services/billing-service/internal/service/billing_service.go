@@ -4,10 +4,12 @@ package service
 import (
 	"context"
 	"errors"
-	"jcloud-project/billing-service/internal/domain"
-	"jcloud-project/billing-service/internal/repository"
 	"log"
 	"time"
+
+	"jcloud-project/billing-service/internal/client"
+	"jcloud-project/billing-service/internal/domain"
+	"jcloud-project/billing-service/internal/repository"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -21,11 +23,17 @@ type BillingService interface {
 }
 
 type billingService struct {
-	repo repository.BillingRepository
+	repo            repository.BillingRepository
+	nextcloudClient client.NextcloudClient
+	userSvcClient   client.UserServiceClient
 }
 
-func NewBillingService(repo repository.BillingRepository) BillingService {
-	return &billingService{repo: repo}
+func NewBillingService(repo repository.BillingRepository, ncClient client.NextcloudClient, userSvcClient client.UserServiceClient) BillingService {
+	return &billingService{
+		repo:            repo,
+		nextcloudClient: ncClient,
+		userSvcClient:   userSvcClient,
+	}
 }
 
 func (s *billingService) GetUserPermissions(ctx context.Context, userID int64) (map[string]interface{}, error) {
@@ -64,6 +72,7 @@ func (s *billingService) GetUserSubscription(ctx context.Context, userID int64) 
 func (s *billingService) ChangeSubscription(ctx context.Context, userID, newPlanID int64) error {
 	// Step 1: Validate that the new plan exists and is active
 	plan, err := s.repo.FindPlanByID(ctx, newPlanID)
+
 	if err != nil {
 		return err // "plan not found" or other DB error
 	}
@@ -81,15 +90,45 @@ func (s *billingService) ChangeSubscription(ctx context.Context, userID, newPlan
 		newEndDate = time.Now().AddDate(0, 1, 0) // 1 month
 	}
 
-	// Step 3: Update the user's subscription in the database
+	// Step 3: Update subscription in DB (код без изменений)
 	err = s.repo.UpdateUserSubscription(ctx, userID, newPlanID, newEndDate)
 	if err != nil {
 		return err
 	}
 
-	// Step 4 (Future): Trigger side-effects, like updating Nextcloud quota.
-	// We will implement this in the next epic.
-	log.Printf("User %d successfully changed subscription to plan %d (%s)", userID, newPlanID, plan.Name)
+	// --- Step 4: Trigger Side-Effects ---
+	// This is the new logic we are adding.
+	go s.syncUserQuotaWithNextcloud(userID, plan.Permissions)
+
+	log.Printf("User %d successfully changed subscription to plan %d (%s). Quota sync initiated.", userID, newPlanID, plan.Name)
 
 	return nil
+}
+
+func (s *billingService) syncUserQuotaWithNextcloud(userID int64, permissions map[string]interface{}) {
+	// We use a background context because the original request might have already finished.
+	ctx := context.Background()
+
+	// 4.1: Get user email from user-service
+	userDetails, err := s.userSvcClient.GetUserDetails(ctx, userID)
+	if err != nil {
+		log.Printf("CRITICAL: Failed to get details for user %d to sync quota: %v", userID, err)
+		return
+	}
+
+	// 4.2: Extract quota from permissions
+	quotaGB, ok := permissions["storage_quota_gb"].(float64) // JSON numbers are float64
+	if !ok {
+		log.Printf("Warning: 'storage_quota_gb' not found or invalid in permissions for user %d", userID)
+		return
+	}
+
+	// 4.3: Call Nextcloud API
+	err = s.nextcloudClient.SetUserQuota(ctx, userDetails.Email, int(quotaGB))
+	if err != nil {
+		log.Printf("CRITICAL: Failed to set Nextcloud quota for user %s (ID: %d): %v", userDetails.Email, userID, err)
+		return
+	}
+
+	log.Printf("Successfully synced quota for user %s to %d GB.", userDetails.Email, int(quotaGB))
 }

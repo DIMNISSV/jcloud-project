@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"jcloud-project/billing-service/internal/client"
 	"jcloud-project/billing-service/internal/handler"
 	"jcloud-project/billing-service/internal/repository"
 	"jcloud-project/billing-service/internal/service"
@@ -29,6 +30,10 @@ func main() {
 		dbHost = "db"
 	}
 
+	ncApiUrl := os.Getenv("NC_API_URL")
+	ncApiUser := os.Getenv("NC_API_USER")
+	ncApiPassword := os.Getenv("NC_API_PASSWORD")
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 
 	// Database Connection
@@ -42,7 +47,14 @@ func main() {
 
 	// Dependency Injection
 	repo := repository.NewBillingPostgresRepository(dbpool)
-	billingService := service.NewBillingService(repo)
+
+	// Create clients
+	nextcloudClient := client.NewNextcloudClient(ncApiUrl, ncApiUser, ncApiPassword)
+	userSvcClient := client.NewUserServiceClient()
+
+	// Inject clients into the service
+	billingService := service.NewBillingService(repo, nextcloudClient, userSvcClient)
+
 	handler := handler.NewBillingHandler(billingService)
 
 	// HTTP Server
