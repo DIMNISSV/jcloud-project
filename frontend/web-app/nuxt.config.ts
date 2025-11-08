@@ -1,4 +1,5 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
+import tailwindcss from '@tailwindcss/vite'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -6,13 +7,27 @@ export default defineNuxtConfig({
   modules: [
     "@nuxt/ui",
     "@pinia/nuxt",
-    '@nuxtjs/tailwindcss',
   ],
+
+  nitro: {
+    alias: {
+      pinia: 'pinia'
+    }
+  },
+
+  pinia: {
+    storesDirs: ['./app/store/**'],
+  },
+
+  css: ['~/assets/css/main.css'],
+  colorMode: { classSuffix: '' },
+
+  vite: { plugins: [tailwindcss()] },
 
   routeRules: {
     '/api/**': {
       proxy: {
-        to: "http://localhost:8080/api/**", // Base path for user-service
+        to: "http://localhost:8080/api/**",
       }
     },
   }
