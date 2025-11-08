@@ -6,6 +6,8 @@ import (
 	"errors"
 	"jcloud-project/billing-service/internal/domain"
 	"jcloud-project/billing-service/internal/repository"
+	"log"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -15,6 +17,7 @@ type BillingService interface {
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
 	GetAllPlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
 	GetUserSubscription(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error)
+	ChangeSubscription(ctx context.Context, userID, newPlanID int64) error
 }
 
 type billingService struct {
@@ -56,4 +59,37 @@ func (s *billingService) GetUserSubscription(ctx context.Context, userID int64) 
 		return nil, err
 	}
 	return details, nil
+}
+
+func (s *billingService) ChangeSubscription(ctx context.Context, userID, newPlanID int64) error {
+	// Step 1: Validate that the new plan exists and is active
+	plan, err := s.repo.FindPlanByID(ctx, newPlanID)
+	if err != nil {
+		return err // "plan not found" or other DB error
+	}
+	if !plan.IsActive {
+		return errors.New("cannot switch to an inactive plan")
+	}
+
+	// Step 2: Determine the new expiration date based on the plan
+	var newEndDate time.Time
+	if plan.Name == "Free" {
+		newEndDate = time.Now().AddDate(100, 0, 0) // 100 years for Free plan
+	} else {
+		// For paid plans, set it to 30 days from now.
+		// In a real app, this would be tied to a successful payment.
+		newEndDate = time.Now().AddDate(0, 1, 0) // 1 month
+	}
+
+	// Step 3: Update the user's subscription in the database
+	err = s.repo.UpdateUserSubscription(ctx, userID, newPlanID, newEndDate)
+	if err != nil {
+		return err
+	}
+
+	// Step 4 (Future): Trigger side-effects, like updating Nextcloud quota.
+	// We will implement this in the next epic.
+	log.Printf("User %d successfully changed subscription to plan %d (%s)", userID, newPlanID, plan.Name)
+
+	return nil
 }

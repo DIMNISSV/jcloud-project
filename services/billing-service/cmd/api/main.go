@@ -69,6 +69,7 @@ func main() {
 	subscriptionsAPI := api.Group("/subscriptions")
 	subscriptionsAPI.Use(echojwt.WithConfig(jwtConfig))
 	subscriptionsAPI.GET("/me", handler.GetUserSubscription)
+	subscriptionsAPI.POST("", handler.ChangeSubscription)
 
 	// Internal routes
 	internalAPI := e.Group("/internal/v1")

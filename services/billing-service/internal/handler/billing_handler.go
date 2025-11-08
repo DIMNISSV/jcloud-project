@@ -3,6 +3,7 @@ package handler
 
 import (
 	"jcloud-project/billing-service/internal/service"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -81,4 +82,37 @@ func (h *BillingHandler) GetUserSubscription(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, subscription)
+}
+
+type changeSubscriptionRequest struct {
+	PlanID int64 `json:"planId"`
+}
+
+func (h *BillingHandler) ChangeSubscription(c echo.Context) error {
+	// Extract user ID from JWT
+	userToken := c.Get("user").(*jwt.Token)
+	claims := userToken.Claims.(*service.JwtCustomClaims)
+	userID := claims.UserID
+
+	// Bind request body
+	var req changeSubscriptionRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request format"})
+	}
+	if req.PlanID <= 0 {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "valid planId is required"})
+	}
+
+	// Call the service
+	err := h.service.ChangeSubscription(c.Request().Context(), userID, req.PlanID)
+	if err != nil {
+		// Handle specific known errors for better frontend feedback
+		if err.Error() == "plan not found" {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": err.Error()})
+		}
+		log.Printf("Error changing subscription for user %d: %v", userID, err)
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not change subscription"})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"message": "subscription updated successfully"})
 }

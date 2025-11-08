@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"jcloud-project/billing-service/internal/domain"
 	"time"
 
@@ -16,6 +17,8 @@ type BillingRepository interface {
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
 	FindAllActivePlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
 	FindSubscriptionDetailsByUserID(ctx context.Context, userID int64) (*domain.UserSubscriptionDetails, error)
+	FindPlanByID(ctx context.Context, planID int64) (*domain.SubscriptionPlan, error)
+	UpdateUserSubscription(ctx context.Context, userID, planID int64, newEndDate time.Time) error
 }
 
 type billingPostgresRepository struct {
@@ -114,4 +117,43 @@ func (r *billingPostgresRepository) FindSubscriptionDetailsByUserID(ctx context.
 		return nil, err
 	}
 	return details, nil
+}
+
+func (r *billingPostgresRepository) FindPlanByID(ctx context.Context, planID int64) (*domain.SubscriptionPlan, error) {
+	query := `
+		SELECT id, name, price, permissions, is_active, created_at, updated_at
+		FROM subscription_plans
+		WHERE id = $1
+	`
+
+	rows, err := r.db.Query(ctx, query, planID)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[domain.SubscriptionPlan])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errors.New("plan not found")
+		}
+		return nil, err
+	}
+
+	return &plan, nil
+}
+
+func (r *billingPostgresRepository) UpdateUserSubscription(ctx context.Context, userID, planID int64, newEndDate time.Time) error {
+	query := `
+        UPDATE user_subscriptions
+        SET plan_id = $2, ends_at = $3, updated_at = NOW()
+        WHERE user_id = $1
+    `
+	tag, err := r.db.Exec(ctx, query, userID, planID, newEndDate)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("subscription not found for user")
+	}
+	return nil
 }
