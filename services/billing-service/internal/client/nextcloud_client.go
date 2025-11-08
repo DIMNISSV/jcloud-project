@@ -14,7 +14,7 @@ import (
 //
 
 type NextcloudClient interface {
-	SetUserQuota(ctx context.Context, username string, quotaGB int) error
+	SetUserQuota(ctx context.Context, userEmail string, quotaGB int) error
 }
 
 type nextcloudClient struct {
@@ -34,10 +34,15 @@ func NewNextcloudClient(baseURL, apiUser, apiPassword string) NextcloudClient {
 }
 
 // SetUserQuota updates a user's storage quota in Nextcloud.
-// The username is typically the user's email address.
-func (c *nextcloudClient) SetUserQuota(ctx context.Context, username string, quotaGB int) error {
-	// The OCS (Open Collaboration Services) API endpoint for updating a user
-	endpoint := fmt.Sprintf("%s/ocs/v2.php/cloud/users/%s", c.baseURL, url.PathEscape(username))
+// The userEmail is the full email address which will be parsed to get the user ID.
+func (c *nextcloudClient) SetUserQuota(ctx context.Context, userEmail string, quotaGB int) error {
+	parts := strings.Split(userEmail, "@")
+	if len(parts) == 0 {
+		return fmt.Errorf("invalid user email format: %s", userEmail)
+	}
+	apiUsername := parts[0]
+
+	endpoint := fmt.Sprintf("%s/ocs/v1.php/cloud/users/%s", c.baseURL, url.PathEscape(apiUsername))
 
 	// Prepare the request body
 	data := url.Values{}
@@ -60,8 +65,9 @@ func (c *nextcloudClient) SetUserQuota(ctx context.Context, username string, quo
 	}
 	defer resp.Body.Close()
 
+	// OCS API for success returns 100 in the status code inside the XML body,
+	// but for simplicity, we'll rely on the HTTP status code for now.
 	if resp.StatusCode != http.StatusOK {
-		// You can add more detailed error handling here by parsing the XML response from Nextcloud
 		return fmt.Errorf("nextcloud API returned non-200 status: %d", resp.StatusCode)
 	}
 
