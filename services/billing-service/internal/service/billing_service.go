@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"jcloud-project/billing-service/internal/domain"
 	"jcloud-project/billing-service/internal/repository"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 type BillingService interface {
 	GetUserPermissions(ctx context.Context, userID int64) (map[string]interface{}, error)
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
+	GetAllPlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
 }
 
 type billingService struct {
@@ -37,4 +39,8 @@ func (s *billingService) GetUserPermissions(ctx context.Context, userID int64) (
 
 func (s *billingService) CreateInitialSubscription(ctx context.Context, userID int64, planName string) error {
 	return s.repo.CreateInitialSubscription(ctx, userID, planName)
+}
+
+func (s *billingService) GetAllPlans(ctx context.Context) ([]domain.SubscriptionPlan, error) {
+	return s.repo.FindAllActivePlans(ctx)
 }

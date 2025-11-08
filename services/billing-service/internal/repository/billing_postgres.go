@@ -7,12 +7,14 @@ import (
 	"jcloud-project/billing-service/internal/domain"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type BillingRepository interface {
 	FindPermissionsByUserID(ctx context.Context, userID int64) (*domain.SubscriptionPlan, error)
 	CreateInitialSubscription(ctx context.Context, userID int64, planName string) error
+	FindAllActivePlans(ctx context.Context) ([]domain.SubscriptionPlan, error)
 }
 
 type billingPostgresRepository struct {
@@ -71,4 +73,29 @@ func (r *billingPostgresRepository) CreateInitialSubscription(ctx context.Contex
 	}
 
 	return tx.Commit(ctx) // Commit the transaction
+}
+
+// FindAllActivePlans retrieves all active subscription plans from the database.
+func (r *billingPostgresRepository) FindAllActivePlans(ctx context.Context) ([]domain.SubscriptionPlan, error) {
+	// NOTE: We select `is_active` here so that RowToStructByName can map it.
+	query := `
+        SELECT id, name, price, permissions, is_active, created_at, updated_at
+        FROM subscription_plans
+        WHERE is_active = TRUE
+        ORDER BY price ASC
+    `
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	// The correct, idiomatic way to use CollectRows with structs.
+	// pgx.RowToStructByName handles mapping snake_case columns to PascalCase fields.
+	// It also handles JSONB to map[string]interface{} automatically.
+	plans, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.SubscriptionPlan])
+	if err != nil {
+		return nil, err
+	}
+
+	return plans, nil
 }

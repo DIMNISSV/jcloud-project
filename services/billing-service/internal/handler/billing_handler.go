@@ -54,3 +54,12 @@ func (h *BillingHandler) CreateSubscription(c echo.Context) error {
 
 	return c.JSON(http.StatusCreated, echo.Map{"message": "subscription created successfully"})
 }
+
+func (h *BillingHandler) GetAllPlans(c echo.Context) error {
+	plans, err := h.service.GetAllPlans(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not retrieve plans"})
+	}
+
+	return c.JSON(http.StatusOK, plans)
+}

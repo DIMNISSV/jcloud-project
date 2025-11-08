@@ -46,7 +46,15 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Internal routes - not exposed to the public internet via API Gateway
+	//
+	// Routes
+	//
+
+	// Public routes, available for frontend clients
+	api := e.Group("/api/v1")
+	api.GET("/plans", handler.GetAllPlans)
+
+	// Internal routes, for service-to-service communication
 	internalAPI := e.Group("/internal/v1")
 	internalAPI.GET("/permissions/:userId", handler.GetUserPermissions)
 	internalAPI.POST("/subscriptions", handler.CreateSubscription)
