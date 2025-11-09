@@ -2,10 +2,12 @@
 package handler
 
 import (
-	"jcloud-project/billing-service/internal/service"
 	"log"
 	"net/http"
 	"strconv"
+
+	"jcloud-project/billing-service/internal/service"
+	commontypes "jcloud-project/libs/go-common/types/jwt"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -69,7 +71,7 @@ func (h *BillingHandler) GetAllPlans(c echo.Context) error {
 func (h *BillingHandler) GetUserSubscription(c echo.Context) error {
 	// Extract user ID from JWT token
 	userToken := c.Get("user").(*jwt.Token)
-	claims := userToken.Claims.(*service.JwtCustomClaims)
+	claims := userToken.Claims.(*commontypes.JwtCustomClaims)
 	userID := claims.UserID
 
 	subscription, err := h.service.GetUserSubscription(c.Request().Context(), userID)
@@ -91,7 +93,7 @@ type changeSubscriptionRequest struct {
 func (h *BillingHandler) ChangeSubscription(c echo.Context) error {
 	// Extract user ID from JWT
 	userToken := c.Get("user").(*jwt.Token)
-	claims := userToken.Claims.(*service.JwtCustomClaims)
+	claims := userToken.Claims.(*commontypes.JwtCustomClaims)
 	userID := claims.UserID
 
 	// Bind request body

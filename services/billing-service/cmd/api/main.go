@@ -11,6 +11,7 @@ import (
 	"jcloud-project/billing-service/internal/handler"
 	"jcloud-project/billing-service/internal/repository"
 	"jcloud-project/billing-service/internal/service"
+	commontypes "jcloud-project/libs/go-common/types/jwt"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -64,7 +65,7 @@ func main() {
 
 	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
-		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(commontypes.JwtCustomClaims) },
 		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
