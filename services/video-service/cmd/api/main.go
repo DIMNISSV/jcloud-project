@@ -20,14 +20,10 @@ import (
 )
 
 func main() {
-	//
 	// Configuration
-	//
 	cfg := config.MustLoad()
 
-	//
 	// Database Connection
-	//
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.DBName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
@@ -50,6 +46,7 @@ func main() {
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.HTTPErrorHandler = handler.CustomHTTPErrorHandler
 
 	//
 	// Routes
@@ -64,7 +61,9 @@ func main() {
 	}
 
 	// Protected route for video uploads
-	api.POST("/videos", videoHandler.UploadVideo, echojwt.WithConfig(jwtConfig))
+	videosAPI := api.Group("/videos")
+	videosAPI.Use(echojwt.WithConfig(jwtConfig))
+	videosAPI.POST("", videoHandler.UploadVideo)
 
 	// Start server
 	log.Println("Starting video-service on :8081")
