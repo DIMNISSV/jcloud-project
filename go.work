@@ -2,8 +2,8 @@
 go 1.25.4
 
 use (
-    ./services/user-service
-    ./services/billing-service
-    ./services/video-service
-    ./libs/go-common
+	./libs/go-common
+	./services/billing-service
+	./services/user-service
+	./services/video-service
 )
