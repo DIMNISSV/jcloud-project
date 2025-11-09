@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	commontypes "jcloud-project/libs/go-common/types/jwt"
 	"jcloud-project/video-service/internal/config"
 	"jcloud-project/video-service/internal/handler"
 	"jcloud-project/video-service/internal/repository"
@@ -57,7 +58,7 @@ func main() {
 
 	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
-		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(commontypes.JwtCustomClaims) },
 		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
