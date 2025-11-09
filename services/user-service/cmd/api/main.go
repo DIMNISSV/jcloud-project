@@ -20,14 +20,10 @@ import (
 )
 
 func main() {
-	//
 	// Configuration
-	//
 	cfg := config.MustLoad()
 
-	//
 	// Database Connection
-	//
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.DBName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
@@ -41,44 +37,45 @@ func main() {
 	// Dependency Injection
 	//
 	userRepo := repository.NewUserPostgresRepository(dbpool)
-	// Передаем JWT-секрет в сервис, где он действительно нужен
 	userService := service.NewUserService(userRepo, cfg.JWT.Secret)
-	userHandler := handler.NewUserHandler(userService)
 
-	//
+	// Инициализируем каждый обработчик отдельно
+	authHandler := handler.NewAuthHandler(userService)
+	adminHandler := handler.NewAdminHandler(userService)
+	internalApiHandler := handler.NewInternalApiHandler(userService)
+
 	// HTTP Server (Echo)
-	//
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	//
+	// Подключаем наш кастомный обработчик ошибок
+	e.HTTPErrorHandler = handler.CustomHTTPErrorHandler
+
 	// Routes
-	//
 	api := e.Group("/api/v1")
 
-	// Public routes
-	api.POST("/users/register", userHandler.Register)
-	api.POST("/users/login", userHandler.Login)
+	// Public routes for authentication
+	api.POST("/users/register", authHandler.Register)
+	api.POST("/users/login", authHandler.Login)
 
-	// Protected routes
+	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(commontypes.JwtCustomClaims) },
 		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
 
-	// Admin routes - requires both JWT auth and Admin role
+	// Admin routes
 	adminAPI := api.Group("/admin")
 	adminAPI.Use(echojwt.WithConfig(jwtConfig))
-	adminAPI.Use(handler.AdminMiddleware) // Наша кастомная middleware для проверки роли ADMIN
+	adminAPI.Use(handler.AdminMiddleware)
+	adminAPI.GET("/users", adminHandler.GetAllUsers)
+	adminAPI.PATCH("/users/:userId", adminHandler.PatchUser)
 
-	adminAPI.GET("/users", userHandler.GetAllUsers)
-	adminAPI.PATCH("/users/:userId", userHandler.PatchUser)
-
-	// Internal routes for service-to-service communication
+	// Internal routes
 	internalAPI := e.Group("/internal/v1")
-	internalAPI.GET("/users/:userId", userHandler.GetInternalUserDetails)
+	internalAPI.GET("/users/:userId", internalApiHandler.GetInternalUserDetails)
 
 	// Start server
 	log.Println("Starting user-service on :8080")
