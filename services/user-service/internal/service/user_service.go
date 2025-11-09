@@ -7,27 +7,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"jcloud-project/user-service/internal/domain"
-	"jcloud-project/user-service/internal/repository"
 	"log"
 	"net/http"
 	"time"
+
+	commontypes "jcloud-project/libs/go-common/types/jwt"
+	"jcloud-project/user-service/internal/domain"
+	"jcloud-project/user-service/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
-
-//
-// JWT Custom Claims
-//
-
-type JwtCustomClaims struct {
-	UserID      int64                  `json:"user_id"`
-	Role        string                 `json:"role,omitempty"`
-	Permissions map[string]interface{} `json:"perms,omitempty"`
-	jwt.RegisteredClaims
-}
 
 //
 // User Service Interface
@@ -108,7 +99,7 @@ func (s *userService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// Set custom claims
-	claims := &JwtCustomClaims{
+	claims := &commontypes.JwtCustomClaims{
 		UserID:      user.ID,
 		Role:        user.Role,
 		Permissions: permissions,

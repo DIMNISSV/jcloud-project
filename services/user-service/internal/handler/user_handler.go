@@ -2,10 +2,12 @@
 package handler
 
 import (
-	"jcloud-project/user-service/internal/service"
 	"log"
 	"net/http"
 	"strconv"
+
+	commontypes "jcloud-project/libs/go-common/types/jwt"
+	"jcloud-project/user-service/internal/service"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
@@ -75,7 +77,7 @@ func (h *UserHandler) Login(c echo.Context) error {
 func (h *UserHandler) Profile(c echo.Context) error {
 	// The middleware places the parsed token in the context
 	userToken := c.Get("user").(*jwt.Token)
-	claims := userToken.Claims.(*service.JwtCustomClaims)
+	claims := userToken.Claims.(*commontypes.JwtCustomClaims)
 	userID := claims.UserID
 
 	user, err := h.service.GetProfile(c.Request().Context(), userID)
@@ -119,7 +121,7 @@ func AdminMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return c.JSON(http.StatusUnauthorized, echo.Map{"error": "invalid token"})
 		}
 
-		claims, ok := userToken.Claims.(*service.JwtCustomClaims)
+		claims, ok := userToken.Claims.(*commontypes.JwtCustomClaims)
 		if !ok {
 			return c.JSON(http.StatusUnauthorized, echo.Map{"error": "invalid token claims"})
 		}

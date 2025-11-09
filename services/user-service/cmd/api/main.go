@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	commontypes "jcloud-project/libs/go-common/types/jwt"
 	"jcloud-project/user-service/internal/config"
 	"jcloud-project/user-service/internal/handler"
 	"jcloud-project/user-service/internal/repository"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/labstack/echo-jwt/v4"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -62,7 +63,7 @@ func main() {
 
 	// Protected routes
 	jwtConfig := echojwt.Config{
-		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(commontypes.JwtCustomClaims) },
 		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
