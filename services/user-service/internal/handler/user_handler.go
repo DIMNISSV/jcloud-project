@@ -3,6 +3,7 @@ package handler
 
 import (
 	"jcloud-project/user-service/internal/service"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -131,36 +132,45 @@ func AdminMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// DTO for user update request by an admin
-type updateUserRequest struct {
-	Email string `json:"email" validate:"required,email"`
-	Role  string `json:"role" validate:"required"`
+// DTO for user partial update request by an admin
+type patchUserRequest struct {
+	Email *string `json:"email,omitempty"`
+	Role  *string `json:"role,omitempty"`
 }
 
 func (h *UserHandler) GetAllUsers(c echo.Context) error {
-	users, err := h.service.GetAllUsers()
+	// Pass the request context to the service layer
+	users, err := h.service.GetAllUsers(c.Request().Context())
 	if err != nil {
+		log.Printf("Error in GetAllUsers handler: %v", err) // Added logging for better debugging
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not retrieve users"})
 	}
 	return c.JSON(http.StatusOK, users)
 }
 
-func (h *UserHandler) UpdateUser(c echo.Context) error {
+func (h *UserHandler) PatchUser(c echo.Context) error {
 	userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid user id"})
 	}
 
-	var req updateUserRequest
+	var req patchUserRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request format"})
 	}
-	// Basic validation
-	if req.Email == "" || (req.Role != "USER" && req.Role != "ADMIN") {
-		return c.JSON(http.StatusBadRequest, echo.Map{"error": "valid email and role are required"})
+
+	// Validation
+	if req.Email != nil && *req.Email == "" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "email cannot be empty"})
+	}
+	if req.Role != nil && (*req.Role != "USER" && *req.Role != "ADMIN") {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "role must be either USER or ADMIN"})
+	}
+	if req.Email == nil && req.Role == nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "at least one field (email, role) must be provided for update"})
 	}
 
-	user, err := h.service.UpdateUser(c.Request().Context(), userID, req.Email, req.Role)
+	user, err := h.service.PatchUser(c.Request().Context(), userID, req.Email, req.Role)
 	if err != nil {
 		if err.Error() == "user not found" {
 			return c.JSON(http.StatusNotFound, echo.Map{"error": err.Error()})

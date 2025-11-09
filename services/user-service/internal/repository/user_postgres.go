@@ -18,7 +18,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByID(ctx context.Context, id int64) (*domain.User, error)
-	FindAll() ([]domain.User, error)
+	FindAll(ctx context.Context) ([]domain.UserPublic, error)
 	Update(ctx context.Context, user *domain.User) error
 }
 
@@ -78,15 +78,15 @@ func (r *userPostgresRepository) FindByID(ctx context.Context, id int64) (*domai
 	return user, nil
 }
 
-func (r *userPostgresRepository) FindAll() ([]domain.User, error) {
+func (r *userPostgresRepository) FindAll(ctx context.Context) ([]domain.UserPublic, error) {
 	query := `SELECT id, email, role, created_at, updated_at FROM users ORDER BY id ASC`
-
-	rows, err := r.db.Query(context.Background(), query)
+	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 
-	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.User])
+	// Теперь мы сопоставляем результат с нашей новой, безопасной структурой
+	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.UserPublic])
 	if err != nil {
 		return nil, err
 	}

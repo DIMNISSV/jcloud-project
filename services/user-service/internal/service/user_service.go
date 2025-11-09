@@ -38,8 +38,8 @@ type UserService interface {
 	Register(ctx context.Context, email, password string) (*domain.User, error)
 	Login(ctx context.Context, email, password string) (string, error)
 	GetProfile(ctx context.Context, userID int64) (*domain.User, error)
-	GetAllUsers() ([]domain.User, error)
-	UpdateUser(ctx context.Context, userID int64, email, role string) (*domain.User, error)
+	GetAllUsers(ctx context.Context) ([]domain.UserPublic, error)
+	PatchUser(ctx context.Context, userID int64, email *string, role *string) (*domain.User, error)
 }
 
 //
@@ -188,22 +188,26 @@ func (s *userService) assignDefaultSubscription(ctx context.Context, userID int6
 	return nil
 }
 
-func (s *userService) GetAllUsers() ([]domain.User, error) {
-	return s.repo.FindAll()
+func (s *userService) GetAllUsers(ctx context.Context) ([]domain.UserPublic, error) {
+	return s.repo.FindAll(ctx)
 }
 
-func (s *userService) UpdateUser(ctx context.Context, userID int64, email, role string) (*domain.User, error) {
-	// First, get the user to ensure it exists and we have all its data
+func (s *userService) PatchUser(ctx context.Context, userID int64, email *string, role *string) (*domain.User, error) {
+	// First, get the current state of the user
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
 		return nil, err // "user not found"
 	}
 
-	// Update the fields
-	user.Email = email
-	user.Role = role
+	// Apply changes only if the field was provided in the request
+	if email != nil {
+		user.Email = *email
+	}
+	if role != nil {
+		user.Role = *role
+	}
 
-	// Persist changes
+	// Persist the updated user object
 	if err := s.repo.Update(ctx, user); err != nil {
 		return nil, err
 	}

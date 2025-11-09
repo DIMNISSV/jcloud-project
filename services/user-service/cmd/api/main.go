@@ -90,11 +90,11 @@ func main() {
 
 	// Admin routes - requires both JWT auth and Admin role
 	adminAPI := api.Group("/admin")
-	adminAPI.Use(echojwt.WithConfig(jwtConfig)) // 1. Must be a valid user
-	adminAPI.Use(handler.AdminMiddleware)       // 2. Must be an admin
+	adminAPI.Use(echojwt.WithConfig(jwtConfig))
+	adminAPI.Use(handler.AdminMiddleware)
 
 	adminAPI.GET("/users", userHandler.GetAllUsers)
-	adminAPI.PUT("/users/:userId", userHandler.UpdateUser)
+	adminAPI.PATCH("/users/:userId", userHandler.PatchUser)
 
 	// Start server
 	log.Println("Starting user-service on :8080")
