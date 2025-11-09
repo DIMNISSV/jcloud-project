@@ -1,43 +1,35 @@
-// cmd/api/main.go
+// services/billing-service/cmd/api/main.go
 package main
 
 import (
 	"context"
 	"fmt"
+	"log"
+
 	"jcloud-project/billing-service/internal/client"
+	"jcloud-project/billing-service/internal/config"
 	"jcloud-project/billing-service/internal/handler"
 	"jcloud-project/billing-service/internal/repository"
 	"jcloud-project/billing-service/internal/service"
-	"log"
-	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
-	if err := godotenv.Load("../../.env"); err != nil {
-		log.Println("Info: .env file not found, relying on environment variables.")
-	}
-
+	//
 	// Configuration
-	dbUser, dbPass, dbName, dbHost := os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD"), os.Getenv("POSTGRES_DB"), "localhost"
-	if os.Getenv("DOCKER_ENV") == "true" {
-		dbHost = "db"
-	}
+	//
+	cfg := config.MustLoad()
 
-	ncApiUrl := os.Getenv("NC_API_URL")
-	ncApiUser := os.Getenv("NC_API_USER")
-	ncApiPassword := os.Getenv("NC_API_PASSWORD")
-
-	jwtSecret := os.Getenv("JWT_SECRET")
-
+	//
 	// Database Connection
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:5432/%s", dbUser, dbPass, dbHost, dbName)
+	//
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.DBName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
@@ -45,11 +37,13 @@ func main() {
 	defer dbpool.Close()
 	log.Println("Database connection successful")
 
+	//
 	// Dependency Injection
+	//
 	repo := repository.NewBillingPostgresRepository(dbpool)
 
 	// Create clients
-	nextcloudClient := client.NewNextcloudClient(ncApiUrl, ncApiUser, ncApiPassword)
+	nextcloudClient := client.NewNextcloudClient(cfg.Nextcloud.ApiURL, cfg.Nextcloud.ApiUser, cfg.Nextcloud.ApiPassword)
 	userSvcClient := client.NewUserServiceClient()
 
 	// Inject clients into the service
@@ -57,7 +51,9 @@ func main() {
 
 	handler := handler.NewBillingHandler(billingService)
 
-	// HTTP Server
+	//
+	// HTTP Server (Echo)
+	//
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -69,7 +65,7 @@ func main() {
 	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
 		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
-		SigningKey:    []byte(jwtSecret),
+		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
 

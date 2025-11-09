@@ -11,7 +11,6 @@ import (
 	"jcloud-project/user-service/internal/repository"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -47,11 +46,15 @@ type UserService interface {
 //
 
 type userService struct {
-	repo repository.UserRepository
+	repo      repository.UserRepository
+	jwtSecret string
 }
 
-func NewUserService(repo repository.UserRepository) UserService {
-	return &userService{repo: repo}
+func NewUserService(repo repository.UserRepository, jwtSecret string) UserService {
+	return &userService{
+		repo:      repo,
+		jwtSecret: jwtSecret,
+	}
 }
 
 func (s *userService) Register(ctx context.Context, email, password string) (*domain.User, error) {
@@ -117,14 +120,13 @@ func (s *userService) Login(ctx context.Context, email, password string) (string
 	// Create token with claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	// Generate encoded token and send it as response.
-	jwtSecret := os.Getenv("JWT_SECRET")
-	t, err := token.SignedString([]byte(jwtSecret))
+	t, err := token.SignedString([]byte(s.jwtSecret))
 	if err != nil {
 		return "", err
 	}
 
 	return t, nil
+
 }
 
 func (s *userService) GetProfile(ctx context.Context, userID int64) (*domain.User, error) {
