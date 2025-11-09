@@ -1,12 +1,11 @@
-# services/video-service/Dockerfile
+ARG BUILDER_IMAGE=golang:1.25-alpine
+# Этап 1: Используем наш готовый сборочный стенд
+FROM ${BUILDER_IMAGE} AS builder
 
-FROM golang:1.25-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /video-service ./cmd/api
+# Этап 2: Собираем конкретный бинарник ИЗ КОРНЯ /app
+RUN CGO_ENABLED=0 GOOS=linux go build -o /video-service ./services/video-service/cmd/api
 
+# Этап 3: Финальный образ
 FROM scratch
 WORKDIR /
 COPY --from=builder /video-service /video-service

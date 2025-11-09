@@ -1,29 +1,14 @@
-# services/user-service/Dockerfile
+ARG BUILDER_IMAGE=golang:1.25-alpine
+# Этап 1: Используем наш готовый сборочный стенд
+FROM ${BUILDER_IMAGE} AS builder
 
-# Stage 1: Build the application
-FROM golang:1.25-alpine AS builder
+# Этап 2: Собираем конкретный бинарник ИЗ КОРНЯ /app
+# Мы не меняем WORKDIR, чтобы команда видела /app/vendor
+RUN CGO_ENABLED=0 GOOS=linux go build -o /user-service ./services/user-service/cmd/api
 
-WORKDIR /app
-
-# Copy go.mod and go.sum to download dependencies
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy the rest of the source code
-COPY . .
-
-# Build the binary
-# CGO_ENABLED=0 is important for a static binary in a scratch image
-RUN CGO_ENABLED=0 GOOS=linux go build -o /user-service ./cmd/api
-
-# Stage 2: Create the final, minimal image
+# Этап 3: Финальный образ
 FROM scratch
-
 WORKDIR /
 COPY --from=builder /user-service /user-service
-
-# Expose port 8080
 EXPOSE 8080
-
-# Command to run the executable
 ENTRYPOINT ["/user-service"]

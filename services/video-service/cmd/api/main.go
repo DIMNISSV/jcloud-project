@@ -1,34 +1,31 @@
-// cmd/api/main.go
+// services/video-service/cmd/api/main.go
 package main
 
 import (
 	"context"
 	"fmt"
+	"log"
+
+	commontypes "jcloud-project/libs/go-common/types/jwt"
+	"jcloud-project/video-service/internal/config"
 	"jcloud-project/video-service/internal/handler"
 	"jcloud-project/video-service/internal/repository"
 	"jcloud-project/video-service/internal/service"
-	"log"
-	"os"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
-	if err := godotenv.Load("../../.env"); err != nil {
-		log.Println("Warning: .env file not found")
-	}
+	// Configuration
+	cfg := config.MustLoad()
 
 	// Database Connection
-	dbUser, dbPass, dbName, dbHost := os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD"), os.Getenv("POSTGRES_DB"), "localhost"
-	if os.Getenv("DOCKER_ENV") == "true" {
-		dbHost = "db"
-	}
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:5432/%s", dbUser, dbPass, dbHost, dbName)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
+		cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.DBName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("Unable to connect to database: %v\n", err)
@@ -36,28 +33,39 @@ func main() {
 	defer dbpool.Close()
 	log.Println("Database connection successful")
 
+	//
 	// Dependency Injection
+	//
 	videoRepo := repository.NewVideoPostgresRepository(dbpool)
 	videoService := service.NewVideoService(videoRepo)
 	videoHandler := handler.NewVideoHandler(videoService)
 
-	// HTTP Server
+	//
+	// HTTP Server (Echo)
+	//
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.HTTPErrorHandler = handler.CustomHTTPErrorHandler
 
+	//
 	// Routes
+	//
 	api := e.Group("/api/v1")
 
 	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
-		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(service.JwtCustomClaims) },
-		SigningKey:    []byte(os.Getenv("JWT_SECRET")),
+		NewClaimsFunc: func(c echo.Context) jwt.Claims { return new(commontypes.JwtCustomClaims) },
+		SigningKey:    []byte(cfg.JWT.Secret),
 		ContextKey:    "user",
 	}
 
 	// Protected route for video uploads
-	api.POST("/videos", videoHandler.UploadVideo, echojwt.WithConfig(jwtConfig))
+	videosAPI := api.Group("/videos")
+	videosAPI.Use(echojwt.WithConfig(jwtConfig))
+	videosAPI.POST("", videoHandler.UploadVideo)
 
+	// Start server
+	log.Println("Starting video-service on :8081")
 	e.Logger.Fatal(e.Start(":8081"))
 }

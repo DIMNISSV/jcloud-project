@@ -1,5 +1,11 @@
 # docker-compose.yml
 services:
+  go-builder:
+    image: jcloud-project-go-builder:latest
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.builder
+
   #
   # Core Infrastructure
   #
@@ -56,12 +62,16 @@ services:
   user-service:
     container_name: user_service
     build:
-      context: ./services/user-service
+      context: .
+      dockerfile: ./services/user-service/Dockerfile
+      args:
+        BUILDER_IMAGE: jcloud-project-go-builder:latest
     restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
       - db
+      - go-builder
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -72,7 +82,10 @@ services:
   video-service:
     container_name: video_service
     build:
-      context: ./services/video-service
+      context: .
+      dockerfile: ./services/video-service/Dockerfile
+      args:
+        BUILDER_IMAGE: jcloud-project-go-builder:latest
     restart: unless-stopped
     ports:
       - "8081:8081"
@@ -80,6 +93,7 @@ services:
       - ./uploads:/uploads # Mount a local folder for temporary file storage
     depends_on:
       - db
+      - go-builder
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -90,12 +104,16 @@ services:
   billing-service:
     container_name: billing_service
     build:
-      context: ./services/billing-service
+      context: .
+      dockerfile: ./services/billing-service/Dockerfile
+      args:
+        BUILDER_IMAGE: jcloud-project-go-builder:latest
     restart: unless-stopped
     ports:
       - "8082:8082"
     depends_on:
       - db
+      - go-builder
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

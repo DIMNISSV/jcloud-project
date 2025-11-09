@@ -1,30 +1,17 @@
-// internal/repository/user_postgres.go
+// services/user-service/internal/repository/user_postgres.go
 package repository
 
 import (
 	"context"
 	"errors"
+	"jcloud-project/libs/go-common/ierr"
 	"jcloud-project/user-service/internal/domain"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-//
-// User Repository Interface
-//
-
-type UserRepository interface {
-	Create(ctx context.Context, user *domain.User) error
-	FindByEmail(ctx context.Context, email string) (*domain.User, error)
-	FindByID(ctx context.Context, id int64) (*domain.User, error)
-	FindAll(ctx context.Context) ([]domain.UserPublic, error)
-	Update(ctx context.Context, user *domain.User) error
-}
-
-//
-// Postgres Implementation
-//
 
 type userPostgresRepository struct {
 	db *pgxpool.Pool
@@ -35,47 +22,52 @@ func NewUserPostgresRepository(db *pgxpool.Pool) UserRepository {
 }
 
 func (r *userPostgresRepository) Create(ctx context.Context, user *domain.User) error {
-	query := `INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, created_at, updated_at`
-	err := r.db.QueryRow(ctx, query, user.Email, user.Password).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	query := `INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, created_at, updated_at`
+	// По умолчанию роль 'USER'
+	if user.Role == "" {
+		user.Role = "USER"
+	}
+	err := r.db.QueryRow(ctx, query, user.Email, user.Password, user.Role).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		// Проверяем на ошибку дублирования email
+		if strings.Contains(err.Error(), "unique constraint") {
+			return ierr.ErrConflict
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *userPostgresRepository) Update(ctx context.Context, user *domain.User) error {
+	query := `UPDATE users SET email = $1, role = $2, updated_at = $3 WHERE id = $4`
+	_, err := r.db.Exec(ctx, query, user.Email, user.Role, time.Now(), user.ID)
 	return err
+}
+
+func (r *userPostgresRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
+	query := `SELECT id, email, password, role, created_at, updated_at FROM users WHERE id = $1`
+	var u domain.User
+	err := r.db.QueryRow(ctx, query, id).Scan(&u.ID, &u.Email, &u.Password, &u.Role, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ierr.ErrNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
 }
 
 func (r *userPostgresRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `SELECT id, email, password, role, created_at, updated_at FROM users WHERE email = $1`
-
-	user := &domain.User{}
-	err := r.db.QueryRow(ctx, query, email).Scan(
-		&user.ID,
-		&user.Email,
-		&user.Password,
-		&user.Role,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+	var u domain.User
+	err := r.db.QueryRow(ctx, query, email).Scan(&u.ID, &u.Email, &u.Password, &u.Role, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
-		// pgx.ErrNoRows is a common error we should handle gracefully
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ierr.ErrNotFound
+		}
 		return nil, err
 	}
-
-	return user, nil
-}
-
-func (r *userPostgresRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
-	query := `SELECT id, email, role, created_at, updated_at FROM users WHERE id = $1`
-
-	user := &domain.User{}
-	err := r.db.QueryRow(ctx, query, id).Scan(
-		&user.ID,
-		&user.Email,
-		&user.Role,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return user, nil
+	return &u, nil
 }
 
 func (r *userPostgresRepository) FindAll(ctx context.Context) ([]domain.UserPublic, error) {
@@ -84,28 +76,16 @@ func (r *userPostgresRepository) FindAll(ctx context.Context) ([]domain.UserPubl
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
-	// Теперь мы сопоставляем результат с нашей новой, безопасной структурой
-	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.UserPublic])
-	if err != nil {
-		return nil, err
+	var users []domain.UserPublic
+	for rows.Next() {
+		var u domain.UserPublic
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
 	}
 
 	return users, nil
-}
-
-func (r *userPostgresRepository) Update(ctx context.Context, user *domain.User) error {
-	query := `
-		UPDATE users
-		SET email = $1, role = $2, updated_at = NOW()
-		WHERE id = $3
-	`
-	tag, err := r.db.Exec(ctx, query, user.Email, user.Role, user.ID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return errors.New("user not found")
-	}
-	return nil
 }

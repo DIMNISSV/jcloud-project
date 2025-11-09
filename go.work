@@ -1,1 +1,9 @@
+// go.work
 go 1.25.4
+
+use (
+	./libs/go-common
+	./services/billing-service
+	./services/user-service
+	./services/video-service
+)

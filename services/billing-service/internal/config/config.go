@@ -1,0 +1,57 @@
+// services/billing-service/internal/config/config.go
+package config
+
+import (
+	"log"
+	"os"
+
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
+)
+
+type Config struct {
+	Env       string `env:"ENV" env-default:"local"`
+	Postgres  PostgresConfig
+	JWT       JWTConfig
+	Nextcloud NextcloudConfig
+}
+
+type PostgresConfig struct {
+	User     string `env:"POSTGRES_USER" env-required:"true"`
+	Password string `env:"POSTGRES_PASSWORD" env-required:"true"`
+	DBName   string `env:"POSTGRES_DB" env-required:"true"`
+	Host     string `env:"DB_HOST" env-default:"localhost"`
+	Port     string `env:"DB_PORT" env-default:"5432"`
+}
+
+type JWTConfig struct {
+	Secret string `env:"JWT_SECRET" env-required:"true"`
+}
+
+type NextcloudConfig struct {
+	ApiURL      string `env:"NC_API_URL" env-required:"true"`
+	ApiUser     string `env:"NC_API_USER" env-required:"true"`
+	ApiPassword string `env:"NC_API_PASSWORD" env-required:"true"`
+}
+
+func MustLoad() *Config {
+	// Загружаем .env файл только если он существует.
+	if _, err := os.Stat("../../.env"); err == nil {
+		if err := godotenv.Load("../../.env"); err != nil {
+			log.Fatalf("cannot load .env file: %v", err)
+		}
+	}
+
+	var cfg Config
+
+	if err := cleanenv.ReadEnv(&cfg); err != nil {
+		log.Fatalf("cannot read config: %v", err)
+	}
+
+	// Особая логика для Docker-окружения
+	if os.Getenv("DOCKER_ENV") == "true" {
+		cfg.Postgres.Host = "db"
+	}
+
+	return &cfg
+}
