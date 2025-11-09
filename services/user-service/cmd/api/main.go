@@ -88,6 +88,14 @@ func main() {
 	internalAPI := e.Group("/internal/v1")
 	internalAPI.GET("/users/:userId", userHandler.GetInternalUserDetails)
 
+	// Admin routes - requires both JWT auth and Admin role
+	adminAPI := api.Group("/admin")
+	adminAPI.Use(echojwt.WithConfig(jwtConfig)) // 1. Must be a valid user
+	adminAPI.Use(handler.AdminMiddleware)       // 2. Must be an admin
+
+	adminAPI.GET("/users", userHandler.GetAllUsers)
+	adminAPI.PUT("/users/:userId", userHandler.UpdateUser)
+
 	// Start server
 	log.Println("Starting user-service on :8080")
 	e.Logger.Fatal(e.Start(":8080"))

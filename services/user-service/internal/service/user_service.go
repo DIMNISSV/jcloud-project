@@ -25,6 +25,7 @@ import (
 
 type JwtCustomClaims struct {
 	UserID      int64                  `json:"user_id"`
+	Role        string                 `json:"role,omitempty"`
 	Permissions map[string]interface{} `json:"perms,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -37,6 +38,8 @@ type UserService interface {
 	Register(ctx context.Context, email, password string) (*domain.User, error)
 	Login(ctx context.Context, email, password string) (string, error)
 	GetProfile(ctx context.Context, userID int64) (*domain.User, error)
+	GetAllUsers() ([]domain.User, error)
+	UpdateUser(ctx context.Context, userID int64, email, role string) (*domain.User, error)
 }
 
 //
@@ -104,6 +107,7 @@ func (s *userService) Login(ctx context.Context, email, password string) (string
 	// Set custom claims
 	claims := &JwtCustomClaims{
 		UserID:      user.ID,
+		Role:        user.Role,
 		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 72)),
@@ -182,4 +186,27 @@ func (s *userService) assignDefaultSubscription(ctx context.Context, userID int6
 	}
 
 	return nil
+}
+
+func (s *userService) GetAllUsers() ([]domain.User, error) {
+	return s.repo.FindAll()
+}
+
+func (s *userService) UpdateUser(ctx context.Context, userID int64, email, role string) (*domain.User, error) {
+	// First, get the user to ensure it exists and we have all its data
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err // "user not found"
+	}
+
+	// Update the fields
+	user.Email = email
+	user.Role = role
+
+	// Persist changes
+	if err := s.repo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }

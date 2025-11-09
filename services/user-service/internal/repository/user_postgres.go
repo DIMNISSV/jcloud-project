@@ -3,8 +3,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"jcloud-project/user-service/internal/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,6 +18,8 @@ type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByID(ctx context.Context, id int64) (*domain.User, error)
+	FindAll() ([]domain.User, error)
+	Update(ctx context.Context, user *domain.User) error
 }
 
 //
@@ -37,13 +41,14 @@ func (r *userPostgresRepository) Create(ctx context.Context, user *domain.User) 
 }
 
 func (r *userPostgresRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
-	query := `SELECT id, email, password, created_at, updated_at FROM users WHERE email = $1`
+	query := `SELECT id, email, password, role, created_at, updated_at FROM users WHERE email = $1`
 
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
 		&user.Email,
 		&user.Password,
+		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -56,12 +61,13 @@ func (r *userPostgresRepository) FindByEmail(ctx context.Context, email string) 
 }
 
 func (r *userPostgresRepository) FindByID(ctx context.Context, id int64) (*domain.User, error) {
-	query := `SELECT id, email, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, email, role, created_at, updated_at FROM users WHERE id = $1`
 
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
 		&user.Email,
+		&user.Role,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -70,4 +76,36 @@ func (r *userPostgresRepository) FindByID(ctx context.Context, id int64) (*domai
 	}
 
 	return user, nil
+}
+
+func (r *userPostgresRepository) FindAll() ([]domain.User, error) {
+	query := `SELECT id, email, role, created_at, updated_at FROM users ORDER BY id ASC`
+
+	rows, err := r.db.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := pgx.CollectRows(rows, pgx.RowToStructByName[domain.User])
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func (r *userPostgresRepository) Update(ctx context.Context, user *domain.User) error {
+	query := `
+		UPDATE users
+		SET email = $1, role = $2, updated_at = NOW()
+		WHERE id = $3
+	`
+	tag, err := r.db.Exec(ctx, query, user.Email, user.Role, user.ID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
 }

@@ -105,3 +105,68 @@ func (h *UserHandler) GetInternalUserDetails(c echo.Context) error {
 		"email": user.Email,
 	})
 }
+
+//
+// Admin Middleware
+//
+
+func AdminMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		// The JWT middleware has already parsed the token and put it in the context.
+		userToken, ok := c.Get("user").(*jwt.Token)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, echo.Map{"error": "invalid token"})
+		}
+
+		claims, ok := userToken.Claims.(*service.JwtCustomClaims)
+		if !ok {
+			return c.JSON(http.StatusUnauthorized, echo.Map{"error": "invalid token claims"})
+		}
+
+		if claims.Role != "ADMIN" {
+			return c.JSON(http.StatusForbidden, echo.Map{"error": "access forbidden: administrator role required"})
+		}
+
+		return next(c)
+	}
+}
+
+// DTO for user update request by an admin
+type updateUserRequest struct {
+	Email string `json:"email" validate:"required,email"`
+	Role  string `json:"role" validate:"required"`
+}
+
+func (h *UserHandler) GetAllUsers(c echo.Context) error {
+	users, err := h.service.GetAllUsers()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not retrieve users"})
+	}
+	return c.JSON(http.StatusOK, users)
+}
+
+func (h *UserHandler) UpdateUser(c echo.Context) error {
+	userID, err := strconv.ParseInt(c.Param("userId"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid user id"})
+	}
+
+	var req updateUserRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "invalid request format"})
+	}
+	// Basic validation
+	if req.Email == "" || (req.Role != "USER" && req.Role != "ADMIN") {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "valid email and role are required"})
+	}
+
+	user, err := h.service.UpdateUser(c.Request().Context(), userID, req.Email, req.Role)
+	if err != nil {
+		if err.Error() == "user not found" {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "could not update user"})
+	}
+
+	return c.JSON(http.StatusOK, user)
+}
