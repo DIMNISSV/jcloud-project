@@ -21,14 +21,10 @@ import (
 )
 
 func main() {
-	//
 	// Configuration
-	//
 	cfg := config.MustLoad()
 
-	//
 	// Database Connection
-	//
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.DBName)
 	dbpool, err := pgxpool.New(context.Background(), connStr)
@@ -41,16 +37,17 @@ func main() {
 	//
 	// Dependency Injection
 	//
-	repo := repository.NewBillingPostgresRepository(dbpool)
+	planRepo := repository.NewPlanPostgresRepository(dbpool)
+	subRepo := repository.NewSubscriptionPostgresRepository(dbpool)
 
-	// Create clients
 	nextcloudClient := client.NewNextcloudClient(cfg.Nextcloud.ApiURL, cfg.Nextcloud.ApiUser, cfg.Nextcloud.ApiPassword)
 	userSvcClient := client.NewUserServiceClient()
 
-	// Inject clients into the service
-	billingService := service.NewBillingService(repo, nextcloudClient, userSvcClient)
+	billingService := service.NewBillingService(planRepo, subRepo, nextcloudClient, userSvcClient)
 
-	handler := handler.NewBillingHandler(billingService)
+	planHandler := handler.NewPlanHandler(billingService)
+	subHandler := handler.NewSubscriptionHandler(billingService)
+	internalApiHandler := handler.NewInternalApiHandler(billingService)
 
 	//
 	// HTTP Server (Echo)
@@ -58,10 +55,10 @@ func main() {
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.HTTPErrorHandler = handler.CustomHTTPErrorHandler
 
-	//
 	// Routes
-	//
+	api := e.Group("/api/v1")
 
 	// JWT Middleware Config
 	jwtConfig := echojwt.Config{
@@ -71,19 +68,18 @@ func main() {
 	}
 
 	// Public routes
-	api := e.Group("/api/v1")
-	api.GET("/plans", handler.GetAllPlans)
+	api.GET("/plans", planHandler.GetAllPlans)
 
 	// Protected routes
 	subscriptionsAPI := api.Group("/subscriptions")
 	subscriptionsAPI.Use(echojwt.WithConfig(jwtConfig))
-	subscriptionsAPI.GET("/me", handler.GetUserSubscription)
-	subscriptionsAPI.POST("", handler.ChangeSubscription)
+	subscriptionsAPI.GET("/me", subHandler.GetUserSubscription)
+	subscriptionsAPI.POST("", subHandler.ChangeSubscription)
 
 	// Internal routes
 	internalAPI := e.Group("/internal/v1")
-	internalAPI.GET("/permissions/:userId", handler.GetUserPermissions)
-	internalAPI.POST("/subscriptions", handler.CreateSubscription)
+	internalAPI.GET("/permissions/:userId", internalApiHandler.GetUserPermissions)
+	internalAPI.POST("/subscriptions", internalApiHandler.CreateSubscription)
 
 	// Start server
 	log.Println("Starting billing-service on :8082")
