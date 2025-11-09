@@ -2,3 +2,5 @@
 .env
 uploads/
 examles/
+collect.go
+collect.txt
